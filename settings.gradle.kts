@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FanCtl-A311D"
+rootProject.name = "LEMO-A311D-FanControl"
 include(":app")
