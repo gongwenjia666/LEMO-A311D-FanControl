@@ -29,8 +29,8 @@ android {
         applicationId = "com.local.fanctl"
         minSdk = 24
         targetSdk = 28
-        versionCode = 8
-        versionName = "8.0"
+        versionCode = 9
+        versionName = "8.1"
         setProperty("archivesBaseName", "FanCtl-v${versionName}")
     }
 

@@ -2,8 +2,12 @@ package com.local.fanctl;
 
 import android.app.Activity;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.KeyEvent;
@@ -21,7 +25,7 @@ import java.io.InputStreamReader;
 /**
  * A311D 盒子（菜鸟 / LEMO CORE 一系）风扇控制。
  *
- * 反编译自 com.local.fanctl v8.0（作者：海东青 · FanCtl · 2026），并做了以下工程化整理：
+ * 反编译自 com.local.fanctl v8.0（原作者：海东青 · FanCtl · 2026，二次整理：gongwenjia），并做了以下工程化整理：
  *  1. 去掉单字节 XOR 混淆，路径改为可读常量；
  *  2. 去掉 ROW_NONE / ROW_MAN 之类的常量别名，恢复原值；
  *  3. 补齐资源、Gradle 工程结构，使其可直接在 CI 编译出包。
@@ -55,7 +59,11 @@ public class FanCtlActivity extends Activity {
     private static final int ROW_FULL = 3;
     private static final int ROW_MID = 4;
 
-    private static final int FOCUS_BG = Color.rgb(35, 79, 130);
+    private static final int FOCUS_BG = Color.rgb(47, 111, 181);
+    /** 按钮常态底色：深板岩灰，白字可读 */
+    private static final int BTN_BG = Color.rgb(52, 62, 78);
+    /** 按钮聚焦底色：琥珀橙，与深色界面对比最强 */
+    private static final int BTN_FOCUS_BG = Color.rgb(255, 167, 38);
 
     private final Handler handler = new Handler();
     private SharedPreferences prefs;
@@ -401,12 +409,47 @@ public class FanCtlActivity extends Activity {
 
     // ------------------------------------------------------------------ UI
 
+    /**
+     * 生成带焦点态的圆角背景：常态深色细描边，聚焦亮色填充 + 白色粗描边，
+     * 远距离（电视/投影）也能一眼看出当前选中项。
+     */
+    private Drawable stateBg(int normalColor, int focusColor, float radiusDp, int normalStrokeDp, int focusStrokeDp) {
+        float d = getResources().getDisplayMetrics().density;
+
+        GradientDrawable normal = new GradientDrawable();
+        normal.setShape(GradientDrawable.RECTANGLE);
+        normal.setCornerRadius(radiusDp * d);
+        normal.setColor(normalColor);
+        normal.setStroke(Math.round(normalStrokeDp * d), Color.rgb(122, 134, 154));
+
+        GradientDrawable focus = new GradientDrawable();
+        focus.setShape(GradientDrawable.RECTANGLE);
+        focus.setCornerRadius(radiusDp * d);
+        focus.setColor(focusColor);
+        focus.setStroke(Math.max(1, Math.round(focusStrokeDp * d)), Color.WHITE);
+
+        StateListDrawable sl = new StateListDrawable();
+        sl.addState(new int[]{android.R.attr.state_focused}, focus);
+        sl.addState(new int[]{android.R.attr.state_pressed}, focus);
+        sl.addState(new int[]{}, normal);
+        return sl;
+    }
+
     private Button btn(String text, final int duty) {
         Button b = new Button(this);
         b.setText(text);
         b.setTextSize(22.0f);
         b.setAllCaps(false);
         b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setBackground(stateBg(BTN_BG, BTN_FOCUS_BG, 16.0f, 1, 4));
+        // 聚焦时文字转深色（亮橙底上黑字最清楚），常态白字
+        b.setTextColor(new ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_focused},
+                        new int[]{android.R.attr.state_pressed},
+                        new int[]{}
+                },
+                new int[]{Color.rgb(26, 26, 26), Color.rgb(26, 26, 26), Color.WHITE}));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ROW_NONE, -2, 1.0f);
         lp.setMargins(10, 10, 10, 10);
         b.setLayoutParams(lp);
@@ -427,6 +470,8 @@ public class FanCtlActivity extends Activity {
     private LinearLayout row(TextView label, final int id) {
         LinearLayout ll = new LinearLayout(this);
         ll.setOrientation(LinearLayout.HORIZONTAL);
+        // 行也有明显焦点态：常态透明，聚焦时蓝色填充 + 白色描边
+        ll.setBackground(stateBg(Color.TRANSPARENT, FOCUS_BG, 10.0f, 0, 3));
         ll.setPadding(20, 14, 20, 14);
         ll.addView(label);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
@@ -440,7 +485,6 @@ public class FanCtlActivity extends Activity {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
                 focusedRow = hasFocus ? ((Integer) v.getTag()).intValue() : ROW_NONE;
-                v.setBackgroundColor(hasFocus ? FOCUS_BG : ROW_NONE);
             }
         });
         ll.setOnClickListener(new View.OnClickListener() {
@@ -562,7 +606,7 @@ public class FanCtlActivity extends Activity {
         left.addView(tip);
 
         TextView author = new TextView(this);
-        author.setText("制作：海东青");
+        author.setText("制作：gongwenjia");
         author.setTextSize(22.0f);
         author.setTextColor(Color.rgb(250, 199, 117));
         author.setGravity(android.view.Gravity.CENTER);
