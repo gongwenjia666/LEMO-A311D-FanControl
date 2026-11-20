@@ -25,7 +25,7 @@ import java.io.InputStreamReader;
 /**
  * A311D 盒子（菜鸟 / LEMO CORE 一系）风扇控制。
  *
- * 反编译自 com.local.fanctl v8.0（原作者：海东青 · FanCtl · 2026，二次整理：gongwenjia），并做了以下工程化整理：
+ * 反编译自 com.local.fanctl v8.0（原作者：海东青 · FanCtl · 2026，二次整理：G.W.J），并做了以下工程化整理：
  *  1. 去掉单字节 XOR 混淆，路径改为可读常量；
  *  2. 去掉 ROW_NONE / ROW_MAN 之类的常量别名，恢复原值；
  *  3. 补齐资源、Gradle 工程结构，使其可直接在 CI 编译出包。
@@ -606,7 +606,7 @@ public class FanCtlActivity extends Activity {
         left.addView(tip);
 
         TextView author = new TextView(this);
-        author.setText("制作：gongwenjia");
+        author.setText("制作：G.W.J");
         author.setTextSize(22.0f);
         author.setTextColor(Color.rgb(250, 199, 117));
         author.setGravity(android.view.Gravity.CENTER);
