@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write   # 创建 Release 与上传 APK 需要写权限
 
 concurrency:
   group: build-${{ github.ref }}
@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 需要完整历史与 tag：数当日 tag 定序号
 
       - name: Decode release keystore
         env:
@@ -38,6 +40,23 @@ jobs:
           echo "RELEASE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           echo "已载入正式签名证书"
 
+      - name: Resolve version
+        run: |
+          set -euo pipefail
+          # 统一按北京时间取日期，避免 CI 的 UTC 错位
+          DATE=$(TZ=Asia/Shanghai date +%Y.%m.%d)
+          # 当日第几次发布：已有 tag 数 + 1（新格式与历史格式一并统计，避免序号回退）
+          OLD_SEQ=$(git tag -l "v${DATE}.*" | wc -l)
+          NEW_SEQ=$(git tag -l "v${DATE}_*" | wc -l)
+          SEQ=$(( OLD_SEQ + NEW_SEQ + 1 ))
+          VERSION_NAME="v${DATE}_${SEQ}"
+          YMD=$(TZ=Asia/Shanghai date +%Y%m%d)
+          # versionCode = yyyymmdd + 两位当日序号，10 位整数，单调递增
+          VERSION_CODE="${YMD}$(printf '%02d' "$SEQ")"
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "版本：${VERSION_NAME}（versionCode=${VERSION_CODE}）"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -57,15 +76,9 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           for f in app/build/outputs/apk/release/*.apk; do
-            cp "$f" "dist/$(basename "$f")"
+            cp "$f" "dist/FanCtl-${VERSION_NAME}.apk"
           done
           ls -lh dist
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: FanCtl-release-${{ github.run_number }}
-          path: dist/*.apk
 
       - name: Verify signature
         run: |
@@ -73,3 +86,28 @@ jobs:
           echo "产物：$APK"
           SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort | tail -1)
           "$SIGNER" verify --print-certs "$APK" | head -6
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FanCtl-${{ env.VERSION_NAME }}
+          path: dist/*.apk
+
+      - name: Create Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION_NAME }}
+          name: FanCtl ${{ env.VERSION_NAME }}
+          body: |
+            ### 本次更新
+
+            ${{ github.event.head_commit.message }}
+
+            ### 安装包
+
+            - 版本：${{ env.VERSION_NAME }}（versionCode ${{ env.VERSION_CODE }}）
+            - 构建：release 变体，正式证书签名
+            - 提交：${{ github.sha }}
+          make_latest: true
+          files: dist/*.apk
