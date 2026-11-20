@@ -650,8 +650,9 @@ public class FanCtlActivity extends Activity {
                 saveCfg();
             }
         });
+        // 与下方按钮行的间距取原值的 1.5 倍（12→18、10→15），避免按键挤在一起
         LinearLayout.LayoutParams lpSave = new LinearLayout.LayoutParams(-1, -2);
-        lpSave.setMargins(10, 12, 10, ROW_NONE);
+        lpSave.setMargins(15, 18, 15, ROW_NONE);
         saveBtn.setLayoutParams(lpSave);
         right.addView(saveBtn);
 
@@ -690,10 +691,20 @@ public class FanCtlActivity extends Activity {
 
         LinearLayout bottomRow = new LinearLayout(this);
         bottomRow.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(ROW_NONE, -2, 1.0f);
-        lp2.setMargins(10, 10, 10, 10);
-        installBtn.setLayoutParams(lp2);
-        rebootBtn.setLayoutParams(new LinearLayout.LayoutParams(ROW_NONE, -2, 1.0f));
+        // 两个按钮等宽等高、同一条基线对齐：只给左右内间距，上下间距交给行本身
+        LinearLayout.LayoutParams lpInstall = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        lpInstall.setMargins(ROW_NONE, ROW_NONE, 8, ROW_NONE);
+        installBtn.setLayoutParams(lpInstall);
+
+        LinearLayout.LayoutParams lpReboot = new LinearLayout.LayoutParams(0, -2, 1.0f);
+        lpReboot.setMargins(8, ROW_NONE, ROW_NONE, ROW_NONE);
+        rebootBtn.setLayoutParams(lpReboot);
+
+        LinearLayout.LayoutParams lpBottom = new LinearLayout.LayoutParams(-1, -2);
+        lpBottom.setMargins(15, 18, 15, 10);
+        bottomRow.setLayoutParams(lpBottom);
+        bottomRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+
         bottomRow.addView(installBtn);
         bottomRow.addView(rebootBtn);
         right.addView(bottomRow);
