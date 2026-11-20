@@ -435,12 +435,11 @@ public class FanCtlActivity extends Activity {
         return sl;
     }
 
-    private Button btn(String text, final int duty) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(22.0f);
+    /** 统一按钮外观：所有按钮共用同一套常态/聚焦配色与描边，避免出现有的按钮高亮明显、有的发灰 */
+    private void styleBtn(Button b) {
         b.setAllCaps(false);
         b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setTextSize(22.0f);
         b.setBackground(stateBg(BTN_BG, BTN_FOCUS_BG, 16.0f, 1, 4));
         // 聚焦时文字转深色（亮橙底上黑字最清楚），常态白字
         b.setTextColor(new ColorStateList(
@@ -450,6 +449,12 @@ public class FanCtlActivity extends Activity {
                         new int[]{}
                 },
                 new int[]{Color.rgb(26, 26, 26), Color.rgb(26, 26, 26), Color.WHITE}));
+    }
+
+    private Button btn(String text, final int duty) {
+        Button b = new Button(this);
+        b.setText(text);
+        styleBtn(b);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ROW_NONE, -2, 1.0f);
         lp.setMargins(10, 10, 10, 10);
         b.setLayoutParams(lp);
@@ -638,9 +643,7 @@ public class FanCtlActivity extends Activity {
 
         Button saveBtn = new Button(this);
         saveBtn.setText("保存温度设置");
-        saveBtn.setTextSize(22.0f);
-        saveBtn.setAllCaps(false);
-        saveBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        styleBtn(saveBtn);
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -654,9 +657,7 @@ public class FanCtlActivity extends Activity {
 
         Button installBtn = new Button(this);
         installBtn.setText("安装开机自启");
-        installBtn.setTextSize(22.0f);
-        installBtn.setAllCaps(false);
-        installBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        styleBtn(installBtn);
         installBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -666,9 +667,7 @@ public class FanCtlActivity extends Activity {
 
         Button rebootBtn = new Button(this);
         rebootBtn.setText("重启盒子");
-        rebootBtn.setTextSize(22.0f);
-        rebootBtn.setAllCaps(false);
-        rebootBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        styleBtn(rebootBtn);
         rebootBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
