@@ -9,3 +9,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# 签名材料：绝对不要提交进仓库
+keystore.properties
+signing/
+*.jks
+*.keystore
