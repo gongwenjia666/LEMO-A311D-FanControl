@@ -78,9 +78,9 @@ public class FanCtlActivity extends Activity {
     private boolean running = false;
     private boolean rebootArmed = false;
 
-    private int cfgS = 34;
-    private int cfgM = 50;
-    private int cfgH = 63;
+    private int cfgS = 30;   // 默认起步 30℃
+    private int cfgM = 45;   // 默认中速 45℃
+    private int cfgH = 60;   // 默认全速 60℃
     private int manPct = 50;
     private int focusedRow = ROW_NONE;
 
@@ -559,9 +559,9 @@ public class FanCtlActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("fanctl", MODE_PRIVATE);
-        cfgS = clamp(prefs.getInt("cfgS", 34), 30, 55);
-        cfgM = clamp(prefs.getInt("cfgM", 50), cfgS + ROW_FULL, 70);
-        cfgH = clamp(prefs.getInt("cfgH", 63), cfgM + ROW_FULL, 85);
+        cfgS = clamp(prefs.getInt("cfgS", 30), 30, 55);
+        cfgM = clamp(prefs.getInt("cfgM", 45), cfgS + ROW_FULL, 70);
+        cfgH = clamp(prefs.getInt("cfgH", 60), cfgM + ROW_FULL, 85);
         manPct = clamp(prefs.getInt("manPct", 50), 0, 100);
 
         LinearLayout root = new LinearLayout(this);
