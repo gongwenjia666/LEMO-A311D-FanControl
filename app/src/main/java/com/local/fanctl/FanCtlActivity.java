@@ -261,9 +261,9 @@ public class FanCtlActivity extends Activity {
                 "Mn=" + P_MAN,
                 "[ -f $Mn ] && sleep 5 && continue",
                 "CF=" + P_CFG,
-                "S=34; Md=50; H=63",
+                "S=30; Md=45; H=60",   // 与 App 默认值保持一致，避免界面显示与实际控制不符
                 "[ -f $CF ] && read S Md H < $CF",
-                "[ -z $H ] && H=63",
+                "[ -z $H ] && H=60",
                 "T=$(cat /sys/class/thermal/thermal_zone0/temp)",
                 "T=$((T/1000))",
                 "D=" + PWM_PERIOD,
