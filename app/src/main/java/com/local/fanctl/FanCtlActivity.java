@@ -36,7 +36,7 @@ public class FanCtlActivity extends Activity {
 
     /** 手动模式标记文件：存在时后台脚本暂停温控 */
     private static final String P_MAN = "/data/local/fan_manual";
-    /** 阈值配置文件，内容为一行 "S M H" */
+    /** 配置：一行 "S M H PS PM PH"（温度阈值 + 对应转速百分比，后三项缺省为 20 60 100） */
     private static final String P_CFG = "/data/local/fan_cfg";
     /** 后台脚本日志 */
     private static final String P_LOG = "/data/local/fan.log";
@@ -58,6 +58,11 @@ public class FanCtlActivity extends Activity {
     private static final int ROW_START = 2;
     private static final int ROW_FULL = 3;
     private static final int ROW_MID = 4;
+    private static final int ROW_PS = 5;
+    private static final int ROW_PM = 6;
+    private static final int ROW_PH = 7;
+    /** 转速百分比调整步长 */
+    private static final int PCT_STEP = 5;
 
     private static final int FOCUS_BG = Color.rgb(47, 111, 181);
     /** 按钮常态底色：深板岩灰，白字可读 */
@@ -72,8 +77,11 @@ public class FanCtlActivity extends Activity {
     private TextView tip;
     private TextView manLbl;
     private TextView startLbl;
+    private TextView psLbl;
     private TextView midLbl;
+    private TextView pmLbl;
     private TextView fullLbl;
+    private TextView phLbl;
 
     private boolean running = false;
     private boolean rebootArmed = false;
@@ -81,6 +89,9 @@ public class FanCtlActivity extends Activity {
     private int cfgS = 30;   // 默认起步 30℃
     private int cfgM = 45;   // 默认中速 45℃
     private int cfgH = 60;   // 默认全速 60℃
+    private int cfgPS = 20;  // 起步温度处的转速 %
+    private int cfgPM = 60;  // 中速温度处的转速 %
+    private int cfgPH = 100; // 全速温度处的转速 %
     private int manPct = 50;
     private int focusedRow = ROW_NONE;
 
@@ -202,6 +213,7 @@ public class FanCtlActivity extends Activity {
     }
 
     private void saveCfg() {
+        // 温度阈值必须严格递增，且留出 1℃ 间隔
         if (cfgM < cfgS + ROW_FULL) {
             cfgM = cfgS + ROW_FULL;
         }
@@ -214,15 +226,32 @@ public class FanCtlActivity extends Activity {
         if (cfgH > 85) {
             cfgH = 85;
         }
+        // 转速百分比同样要递增：0 ≤ 起步 < 中速 < 全速 ≤ 100
+        cfgPS = clamp(cfgPS, 0, 90);
+        if (cfgPM < cfgPS + PCT_STEP) {
+            cfgPM = cfgPS + PCT_STEP;
+        }
+        if (cfgPM > 95) {
+            cfgPM = 95;
+        }
+        if (cfgPH < cfgPM + PCT_STEP) {
+            cfgPH = cfgPM + PCT_STEP;
+        }
+        cfgPH = clamp(cfgPH, 0, 100);
+
         final int fs = cfgS;
         final int fm = cfgM;
         final int fh = cfgH;
-        prefs.edit().putInt("cfgS", fs).putInt("cfgM", fm).putInt("cfgH", fh).commit();
-        tip.setText("已保存：" + fs + "°C 起20% / " + fm + "°C 60% / " + fh + "°C 100%，5秒内生效");
+        final int ps = cfgPS;
+        final int pm = cfgPM;
+        final int ph = cfgPH;
+        prefs.edit().putInt("cfgS", fs).putInt("cfgM", fm).putInt("cfgH", fh)
+                .putInt("cfgPS", ps).putInt("cfgPM", pm).putInt("cfgPH", ph).commit();
+        tip.setText("已保存：" + fs + "℃→" + ps + "% / " + fm + "℃→" + pm + "% / " + fh + "℃→" + ph + "%，5秒内生效");
         new Thread(new Runnable() {
             @Override
             public void run() {
-                sh("echo '" + fs + " " + fm + " " + fh + "' > " + P_CFG);
+                sh("echo '" + fs + " " + fm + " " + fh + " " + ps + " " + pm + " " + ph + "' > " + P_CFG);
                 refresh();
             }
         }).start();
@@ -261,19 +290,28 @@ public class FanCtlActivity extends Activity {
                 "Mn=" + P_MAN,
                 "[ -f $Mn ] && sleep 5 && continue",
                 "CF=" + P_CFG,
-                "S=30; Md=45; H=60",   // 与 App 默认值保持一致，避免界面显示与实际控制不符
-                "[ -f $CF ] && read S Md H < $CF",
+                // 默认值与 App 保持一致：温度 30/45/60，转速 20/60/100
+                "S=30; Md=45; H=60; PS=20; PM=60; PH=100",
+                "[ -f $CF ] && read S Md H PS PM PH < $CF",
                 "[ -z $H ] && H=60",
+                "[ -z $PS ] && PS=20",
+                "[ -z $PM ] && PM=60",
+                "[ -z $PH ] && PH=100",
                 // 阈值必须严格递增，否则下面的除法会出错
                 "[ $Md -le $S ] && Md=$((S+1))",
                 "[ $H -le $Md ] && H=$((Md+1))",
+                // 转速百分比做一次兜底校正：0 <= PS < PM < PH <= 100
+                "[ $PS -lt 0 ] && PS=0",
+                "[ $PM -le $PS ] && PM=$((PS+1))",
+                "[ $PH -le $PM ] && PH=$((PM+1))",
+                "[ $PH -gt 100 ] && PH=100",
                 "T=$(cat /sys/class/thermal/thermal_zone0/temp)",
                 "T=$((T/1000))",
-                // 风量百分比：S 起 20%，M 到 60%，H 到 100%，之间线性过渡
+                // 风量：S 处 PS%，M 处 PM%，H 处 PH%，区间内按温度线性过渡
                 "P=0",
-                "if [ $T -ge $H ]; then P=100;",
-                "elif [ $T -ge $Md ]; then P=$((60 + 40 * (T - Md) / (H - Md)));",
-                "elif [ $T -ge $S ]; then P=$((20 + 40 * (T - S) / (Md - S)));",
+                "if [ $T -ge $H ]; then P=$PH;",
+                "elif [ $T -ge $Md ]; then P=$((PM + (PH - PM) * (T - Md) / (H - Md)));",
+                "elif [ $T -ge $S ]; then P=$((PS + (PM - PS) * (T - S) / (Md - S)));",
                 "fi",
                 // duty 低有效：风量 P% => duty (100-P)*period/100
                 "D=$(((100 - P) * " + PWM_PERIOD + " / 100))",
@@ -348,9 +386,12 @@ public class FanCtlActivity extends Activity {
 
     private void updLbls() {
         manLbl.setText("手动风量\u3000" + manPct + "%\u3000（0=停 100=全速）");
-        startLbl.setText("起步温度\u3000" + cfgS + "°C\u3000（起转 20%）");
-        midLbl.setText("中速温度\u3000" + cfgM + "°C\u3000（到此 60%）");
-        fullLbl.setText("全速温度\u3000" + cfgH + "°C\u3000（到此 100%）");
+        startLbl.setText("起步温度\u3000" + cfgS + "℃\u3000（低于→停转）");
+        psLbl.setText("起步转速\u3000" + cfgPS + "%\u3000（到起步温度时）");
+        midLbl.setText("中速温度\u3000" + cfgM + "℃");
+        pmLbl.setText("中速转速\u3000" + cfgPM + "%\u3000（到中速温度时）");
+        fullLbl.setText("全速温度\u3000" + cfgH + "℃");
+        phLbl.setText("全速转速\u3000" + cfgPH + "%\u3000（到全速温度及以上）");
     }
 
     private void loadCfg() {
@@ -364,6 +405,12 @@ public class FanCtlActivity extends Activity {
                     cfgH = parts.length > 2
                             ? clamp(Integer.parseInt(parts[2]), cfgM + ROW_FULL, 85)
                             : clamp(((cfgM + cfgH) / 2) + ROW_FULL, cfgM + ROW_FULL, 85);
+                    // 老版本配置文件只有 "S M H" 三项，缺省按 20/60/100
+                    cfgPS = parts.length > 3 ? clamp(Integer.parseInt(parts[3]), 0, 90) : 20;
+                    cfgPM = parts.length > 4 ? clamp(Integer.parseInt(parts[4]), cfgPS + PCT_STEP, 95) : 60;
+                    cfgPH = parts.length > 5 ? clamp(Integer.parseInt(parts[5]), cfgPM + PCT_STEP, 100) : 100;
+                    prefs.edit().putInt("cfgS", cfgS).putInt("cfgM", cfgM).putInt("cfgH", cfgH)
+                            .putInt("cfgPS", cfgPS).putInt("cfgPM", cfgPM).putInt("cfgPH", cfgPH).apply();
                 } catch (Exception ignored) {
                 }
                 handler.post(new Runnable() {
@@ -405,7 +452,7 @@ public class FanCtlActivity extends Activity {
             }
             String mode = "s".equals(parts[2])
                     ? "手动（" + manPct + "%）"
-                    : "自动（" + cfgS + "°C起20% → " + cfgM + "°C 60% → " + cfgH + "°C 100%）";
+                    : "自动（" + cfgS + "℃→" + cfgPS + "% → " + cfgM + "℃→" + cfgPM + "% → " + cfgH + "℃→" + cfgPH + "%）";
             status.setText("温度 " + temp + "°C    风量约 " + pct + "%");
             sub.setText("模式：" + mode);
         } catch (Exception e) {
@@ -558,6 +605,27 @@ public class FanCtlActivity extends Activity {
                 handler.postDelayed(saveRun, 1000L);
                 return true;
             }
+            if (focusedRow == ROW_PS) {
+                cfgPS = clamp(cfgPS + delta * PCT_STEP, 0, cfgPM - PCT_STEP);
+                updLbls();
+                handler.removeCallbacks(saveRun);
+                handler.postDelayed(saveRun, 1000L);
+                return true;
+            }
+            if (focusedRow == ROW_PM) {
+                cfgPM = clamp(cfgPM + delta * PCT_STEP, cfgPS + PCT_STEP, cfgPH - PCT_STEP);
+                updLbls();
+                handler.removeCallbacks(saveRun);
+                handler.postDelayed(saveRun, 1000L);
+                return true;
+            }
+            if (focusedRow == ROW_PH) {
+                cfgPH = clamp(cfgPH + delta * PCT_STEP, cfgPM + PCT_STEP, 100);
+                updLbls();
+                handler.removeCallbacks(saveRun);
+                handler.postDelayed(saveRun, 1000L);
+                return true;
+            }
         }
         return super.dispatchKeyEvent(event);
     }
@@ -570,6 +638,9 @@ public class FanCtlActivity extends Activity {
         cfgM = clamp(prefs.getInt("cfgM", 45), cfgS + ROW_FULL, 70);
         cfgH = clamp(prefs.getInt("cfgH", 60), cfgM + ROW_FULL, 85);
         manPct = clamp(prefs.getInt("manPct", 50), 0, 100);
+        cfgPS = clamp(prefs.getInt("cfgPS", 20), 0, 90);
+        cfgPM = clamp(prefs.getInt("cfgPM", 60), cfgPS + PCT_STEP, 95);
+        cfgPH = clamp(prefs.getInt("cfgPH", 100), cfgPM + PCT_STEP, 100);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.HORIZONTAL);
@@ -642,14 +713,20 @@ public class FanCtlActivity extends Activity {
         right.addView(row(manLbl, ROW_MAN));
         startLbl = label("", Color.rgb(255, 200, 100));
         right.addView(row(startLbl, ROW_START));
+        psLbl = label("", Color.rgb(255, 214, 140));
+        right.addView(row(psLbl, ROW_PS));
         midLbl = label("", Color.rgb(255, 170, 90));
         right.addView(row(midLbl, ROW_MID));
+        pmLbl = label("", Color.rgb(255, 186, 120));
+        right.addView(row(pmLbl, ROW_PM));
         fullLbl = label("", Color.rgb(255, 130, 100));
         right.addView(row(fullLbl, ROW_FULL));
+        phLbl = label("", Color.rgb(255, 150, 120));
+        right.addView(row(phLbl, ROW_PH));
         updLbls();
 
         Button saveBtn = new Button(this);
-        saveBtn.setText("保存温度设置");
+        saveBtn.setText("保存温度与转速");
         styleBtn(saveBtn);
         saveBtn.setOnClickListener(new View.OnClickListener() {
             @Override
