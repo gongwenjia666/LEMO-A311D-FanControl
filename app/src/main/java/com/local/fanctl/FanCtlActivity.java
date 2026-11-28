@@ -75,7 +75,6 @@ public class FanCtlActivity extends Activity {
     private TextView status;
     private TextView sub;
     private TextView tip;
-    private TextView manLbl;
     /** 按行 id 索引的数值控件（ROW_START..ROW_PH） */
     private final TextView[] valueViews = new TextView[ROW_PH + 1];
     /** 按行 id 索引的格子常态底色，编辑态要还原用 */
@@ -427,7 +426,7 @@ public class FanCtlActivity extends Activity {
     // ------------------------------------------------------------------ 状态
 
     private void updLbls() {
-        manLbl.setText("手动风量\u3000" + manPct + "%");
+        setVal(ROW_MAN, manPct + "%");
         setVal(ROW_START, cfgS + "℃");
         setVal(ROW_PS, cfgPS + "%");
         setVal(ROW_MID, cfgM + "℃");
@@ -685,9 +684,6 @@ public class FanCtlActivity extends Activity {
         v.setBackground(stateBg(cellBg[id], BTN_FOCUS_BG, 12.0f, 1, 5));
         if (valueViews[id] != null) {
             valueViews[id].setTextColor(Color.rgb(26, 26, 26));
-        } else if (manLbl != null) {
-            // 手动风量这一行的文字直接在标签里，编辑态同样转深色
-            manLbl.setTextColor(Color.rgb(26, 26, 26));
         }
         tip.setText("左右键调数值，OK 或上下键完成");
     }
@@ -705,8 +701,6 @@ public class FanCtlActivity extends Activity {
             v.setBackground(stateBg(cellBg[id], FOCUS_BG, 10.0f, 1, 3));
             if (valueViews[id] != null) {
                 valueViews[id].setTextColor(Color.WHITE);
-            } else if (manLbl != null) {
-                manLbl.setTextColor(Color.rgb(120, 200, 255));
             }
         }
         saveCfg();
@@ -878,8 +872,7 @@ public class FanCtlActivity extends Activity {
         btnRow.addView(btn("停止", PWM_PERIOD));
         right.addView(btnRow);
 
-        manLbl = label("", Color.rgb(120, 200, 255));
-        right.addView(row(manLbl, ROW_MAN));
+        right.addView(gridCell("手动风量", Color.rgb(120, 200, 255), Color.rgb(30, 38, 52), ROW_MAN));
 
         // 温度一列（低/中/高）、转速一列（低/中/高），各三竖排
         LinearLayout grid = new LinearLayout(this);
@@ -905,6 +898,7 @@ public class FanCtlActivity extends Activity {
         grid.addView(tempCol);
         grid.addView(fanCol);
         right.addView(grid);
+        updLbls();
 
         Button saveBtn = new Button(this);
         saveBtn.setText("保存温度与转速");
