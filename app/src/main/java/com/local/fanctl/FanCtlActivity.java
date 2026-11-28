@@ -639,7 +639,7 @@ public class FanCtlActivity extends Activity {
         ll.addView(v, new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(6, 4, 6, 4);
+        lp.setMargins(12, 6, 12, 6);
         ll.setLayoutParams(lp);
         ll.setTag(Integer.valueOf(id));
         ll.setFocusable(true);
@@ -885,16 +885,12 @@ public class FanCtlActivity extends Activity {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams lpGrid = new LinearLayout.LayoutParams(-1, -2);
-        lpGrid.setMargins(6, 8, 6, 4);
+        lpGrid.setMargins(40, 10, 40, 4);
         grid.setLayoutParams(lpGrid);
 
         LinearLayout tempCol = new LinearLayout(this);
         tempCol.setOrientation(LinearLayout.VERTICAL);
         tempCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView tempTitle = label("温度", Color.rgb(150, 160, 175));
-        tempTitle.setTextSize(17.0f);
-        tempTitle.setPadding(20, 2, 0, 4);
-        tempCol.addView(tempTitle);
         tempCol.addView(gridCell("低温", Color.rgb(255, 200, 100), Color.rgb(33, 41, 56), ROW_START));
         tempCol.addView(gridCell("中温", Color.rgb(255, 170, 90), Color.rgb(33, 41, 56), ROW_MID));
         tempCol.addView(gridCell("高温", Color.rgb(255, 130, 100), Color.rgb(33, 41, 56), ROW_FULL));
@@ -902,10 +898,6 @@ public class FanCtlActivity extends Activity {
         LinearLayout fanCol = new LinearLayout(this);
         fanCol.setOrientation(LinearLayout.VERTICAL);
         fanCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        TextView fanTitle = label("转速", Color.rgb(150, 160, 175));
-        fanTitle.setTextSize(17.0f);
-        fanTitle.setPadding(20, 2, 0, 4);
-        fanCol.addView(fanTitle);
         fanCol.addView(gridCell("低速", Color.rgb(255, 214, 140), Color.rgb(40, 52, 70), ROW_PS));
         fanCol.addView(gridCell("中速", Color.rgb(255, 186, 120), Color.rgb(40, 52, 70), ROW_PM));
         fanCol.addView(gridCell("高速", Color.rgb(255, 150, 120), Color.rgb(40, 52, 70), ROW_PH));
