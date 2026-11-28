@@ -76,14 +76,14 @@ public class FanCtlActivity extends Activity {
     private TextView sub;
     private TextView tip;
     private TextView manLbl;
-    private TextView valS;
-    private TextView valPS;
-    private TextView valM;
-    private TextView valPM;
-    private TextView valH;
-    private TextView valPH;
-    /** gridRow() 刚创建的数值 TextView，供调用方接住 */
-    private TextView gridValue;
+    /** 按行 id 索引的数值控件（ROW_START..ROW_PH） */
+    private final TextView[] valueViews = new TextView[ROW_PH + 1];
+    /** 按行 id 索引的格子常态底色，编辑态要还原用 */
+    private final int[] cellBg = new int[ROW_PH + 1];
+    /** 是否处于"左右键调数值"的编辑态 */
+    private boolean editing = false;
+    private View editView = null;
+    private int cellBgCurrent = Color.TRANSPARENT;
 
     private boolean running = false;
     private boolean rebootArmed = false;
@@ -389,12 +389,19 @@ public class FanCtlActivity extends Activity {
 
     private void updLbls() {
         manLbl.setText("手动风量\u3000" + manPct + "%");
-        valS.setText(cfgS + "℃");
-        valPS.setText(cfgPS + "%");
-        valM.setText(cfgM + "℃");
-        valPM.setText(cfgPM + "%");
-        valH.setText(cfgH + "℃");
-        valPH.setText(cfgPH + "%");
+        setVal(ROW_START, cfgS + "℃");
+        setVal(ROW_PS, cfgPS + "%");
+        setVal(ROW_MID, cfgM + "℃");
+        setVal(ROW_PM, cfgPM + "%");
+        setVal(ROW_FULL, cfgH + "℃");
+        setVal(ROW_PH, cfgPH + "%");
+    }
+
+    private void setVal(int row, String text) {
+        TextView tv = valueViews[row];
+        if (tv != null) {
+            tv.setText(text);
+        }
     }
 
     /** 左侧模式说明：自动模式一行一节，温度与转速之间用横杠，档位之间用箭头 */
@@ -573,47 +580,98 @@ public class FanCtlActivity extends Activity {
 
     /**
      * 网格里的一格：左侧名称、右侧数值，整格可聚焦。
-     * 数值 TextView 会存到 gridValue，调用方取走后自己更新文字。
+     * 常态带一层淡底色，和面板背景区分开；聚焦蓝色、编辑中琥珀色。
      */
-    private LinearLayout gridCell(String name, int nameColor, final int id) {
+    private LinearLayout gridCell(String name, int nameColor, int bg, final int id) {
         LinearLayout ll = new LinearLayout(this);
         ll.setOrientation(LinearLayout.HORIZONTAL);
         ll.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        ll.setBackground(stateBg(Color.TRANSPARENT, FOCUS_BG, 10.0f, 0, 3));
-        ll.setPadding(18, 12, 18, 12);
+        ll.setBackground(stateBg(bg, FOCUS_BG, 10.0f, 1, 3));
+        ll.setPadding(18, 10, 18, 10);
 
         TextView n = label(name, nameColor);
         n.setTypeface(Typeface.DEFAULT_BOLD);
-        LinearLayout.LayoutParams lpN = new LinearLayout.LayoutParams(-2, -2);
-        ll.addView(n, lpN);
+        ll.addView(n, new LinearLayout.LayoutParams(-2, -2));
 
         TextView v = label("", Color.WHITE);
         v.setTextSize(24.0f);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setGravity(android.view.Gravity.END);
-        LinearLayout.LayoutParams lpv = new LinearLayout.LayoutParams(0, -2, 1.0f);
-        ll.addView(v, lpv);
+        ll.addView(v, new LinearLayout.LayoutParams(0, -2, 1.0f));
 
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
-        lp.setMargins(6, 5, 6, 5);
+        lp.setMargins(6, 4, 6, 4);
         ll.setLayoutParams(lp);
         ll.setTag(Integer.valueOf(id));
         ll.setFocusable(true);
         ll.setFocusableInTouchMode(true);
         ll.setClickable(true);
+        cellBg[id] = bg;
+        valueViews[id] = v;
         ll.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View view, boolean hasFocus) {
-                focusedRow = hasFocus ? ((Integer) view.getTag()).intValue() : ROW_NONE;
+                if (hasFocus) {
+                    focusedRow = ((Integer) view.getTag()).intValue();
+                    cellBgCurrent = cellBg[focusedRow];
+                } else {
+                    cellBgCurrent = Color.TRANSPARENT;
+                    if (editing) {
+                        exitEdit();
+                    }
+                }
             }
         });
         ll.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                saveCfg();
+                if (!editing) {
+                    enterEdit(view);
+                } else {
+                    exitEdit();
+                }
             }
         });
-        gridValue = v;
         return ll;
+    }
+
+    /** 进入"左右键调数值"编辑态 */
+    private void enterEdit(View v) {
+        if (v == null || !(v.getTag() instanceof Integer)) {
+            return;
+        }
+        int id = ((Integer) v.getTag()).intValue();
+        editing = true;
+        editView = v;
+        v.setBackground(stateBg(cellBg[id], BTN_FOCUS_BG, 12.0f, 1, 5));
+        if (valueViews[id] != null) {
+            valueViews[id].setTextColor(Color.rgb(26, 26, 26));
+        } else if (manLbl != null) {
+            // 手动风量这一行的文字直接在标签里，编辑态同样转深色
+            manLbl.setTextColor(Color.rgb(26, 26, 26));
+        }
+        tip.setText("左右键调数值，OK 或上下键完成");
+    }
+
+    /** 退出编辑态并恢复格子外观 */
+    private void exitEdit() {
+        if (!editing) {
+            return;
+        }
+        editing = false;
+        View v = editView;
+        editView = null;
+        if (v != null && v.getTag() instanceof Integer) {
+            int id = ((Integer) v.getTag()).intValue();
+            v.setBackground(stateBg(cellBg[id], FOCUS_BG, 10.0f, 1, 3));
+            if (valueViews[id] != null) {
+                valueViews[id].setTextColor(Color.WHITE);
+            } else if (manLbl != null) {
+                manLbl.setTextColor(Color.rgb(120, 200, 255));
+            }
+        }
+        saveCfg();
+        tip.setText("上下左右移动焦点，OK 进入调节，左右键调数值");
     }
 
     private TextView label(String text, int color) {
@@ -627,62 +685,75 @@ public class FanCtlActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int code = event.getKeyCode();
-        if (event.getAction() == KeyEvent.ACTION_DOWN && (code == KeyEvent.KEYCODE_DPAD_LEFT
-                || code == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-            int delta = code == KeyEvent.KEYCODE_DPAD_RIGHT ? ROW_MAN : -1;
+        if (event.getAction() != KeyEvent.ACTION_DOWN) {
+            return super.dispatchKeyEvent(event);
+        }
+
+        // OK：进入 / 退出编辑态
+        if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER
+                || code == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            if (editing) {
+                exitEdit();
+                return true;
+            }
+            View v = getCurrentFocus();
+            if (v != null && v.getTag() instanceof Integer) {
+                int id = ((Integer) v.getTag()).intValue();
+                if (id != ROW_NONE) {
+                    enterEdit(v);
+                    return true;
+                }
+            }
+            return super.dispatchKeyEvent(event);
+        }
+
+        // 上下移动焦点：顺手退出编辑态，把方向键交还系统
+        if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (editing) {
+                exitEdit();
+            }
+            return super.dispatchKeyEvent(event);
+        }
+
+        if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            // 不在编辑态时，左右键用来在"温度列 / 转速列"之间移动焦点
+            if (!editing) {
+                return super.dispatchKeyEvent(event);
+            }
+            int step = code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
             if (focusedRow == ROW_MAN) {
-                manPct = clamp(manPct + (delta * 5), 0, 100);
+                manPct = clamp(manPct + step * PCT_STEP, 0, 100);
                 prefs.edit().putInt("manPct", manPct).commit();
                 updLbls();
                 handler.removeCallbacks(manRun);
-                handler.postDelayed(manRun, 600L);
-                return true;
-            }
-            if (focusedRow == ROW_START) {
-                cfgS = clamp(cfgS + delta, 30, 55);
+                handler.postDelayed(manRun, 400L);
+            } else if (focusedRow == ROW_START) {
+                cfgS = clamp(cfgS + step, 30, 55);
                 cfgM = clamp(cfgM, cfgS + ROW_FULL, 70);
                 cfgH = clamp(cfgH, cfgM + ROW_FULL, 85);
                 updLbls();
-                handler.removeCallbacks(saveRun);
-                handler.postDelayed(saveRun, 1000L);
-                return true;
-            }
-            if (focusedRow == ROW_MID) {
-                cfgM = clamp(cfgM + delta, cfgS + ROW_FULL, 70);
+            } else if (focusedRow == ROW_MID) {
+                cfgM = clamp(cfgM + step, cfgS + ROW_FULL, 70);
                 cfgH = clamp(cfgH, cfgM + ROW_FULL, 85);
                 updLbls();
-                handler.removeCallbacks(saveRun);
-                handler.postDelayed(saveRun, 1000L);
-                return true;
-            }
-            if (focusedRow == ROW_FULL) {
-                cfgH = clamp(cfgH + delta, cfgM + ROW_FULL, 85);
+            } else if (focusedRow == ROW_FULL) {
+                cfgH = clamp(cfgH + step, cfgM + ROW_FULL, 85);
                 updLbls();
-                handler.removeCallbacks(saveRun);
-                handler.postDelayed(saveRun, 1000L);
-                return true;
-            }
-            if (focusedRow == ROW_PS) {
-                cfgPS = clamp(cfgPS + delta * PCT_STEP, 0, cfgPM - PCT_STEP);
+            } else if (focusedRow == ROW_PS) {
+                cfgPS = clamp(cfgPS + step * PCT_STEP, 0, cfgPM - PCT_STEP);
                 updLbls();
-                handler.removeCallbacks(saveRun);
-                handler.postDelayed(saveRun, 1000L);
-                return true;
-            }
-            if (focusedRow == ROW_PM) {
-                cfgPM = clamp(cfgPM + delta * PCT_STEP, cfgPS + PCT_STEP, cfgPH - PCT_STEP);
+            } else if (focusedRow == ROW_PM) {
+                cfgPM = clamp(cfgPM + step * PCT_STEP, cfgPS + PCT_STEP, cfgPH - PCT_STEP);
                 updLbls();
-                handler.removeCallbacks(saveRun);
-                handler.postDelayed(saveRun, 1000L);
-                return true;
-            }
-            if (focusedRow == ROW_PH) {
-                cfgPH = clamp(cfgPH + delta * PCT_STEP, cfgPM + PCT_STEP, 100);
+            } else if (focusedRow == ROW_PH) {
+                cfgPH = clamp(cfgPH + step * PCT_STEP, cfgPM + PCT_STEP, 100);
                 updLbls();
-                handler.removeCallbacks(saveRun);
-                handler.postDelayed(saveRun, 1000L);
-                return true;
+            } else {
+                return super.dispatchKeyEvent(event);
             }
+            handler.removeCallbacks(saveRun);
+            handler.postDelayed(saveRun, 800L);
+            return true;
         }
         return super.dispatchKeyEvent(event);
     }
@@ -740,7 +811,7 @@ public class FanCtlActivity extends Activity {
         left.addView(spacer);
 
         tip = new TextView(this);
-        tip.setText("上下移动焦点，左右键调数值，OK 确认");
+        tip.setText("上下左右移动焦点，OK 进入调节，左右键调数值");
         tip.setTextSize(18.0f);
         tip.setTextColor(Color.rgb(136, 136, 136));
         tip.setGravity(android.view.Gravity.CENTER);
@@ -775,33 +846,34 @@ public class FanCtlActivity extends Activity {
         LinearLayout grid = new LinearLayout(this);
         grid.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams lpGrid = new LinearLayout.LayoutParams(-1, -2);
-        lpGrid.setMargins(6, 4, 6, 4);
+        lpGrid.setMargins(6, 8, 6, 4);
         grid.setLayoutParams(lpGrid);
 
         LinearLayout tempCol = new LinearLayout(this);
         tempCol.setOrientation(LinearLayout.VERTICAL);
         tempCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        tempCol.addView(gridCell("低温", Color.rgb(255, 200, 100), ROW_START));
-        valS = gridValue;
-        tempCol.addView(gridCell("中温", Color.rgb(255, 170, 90), ROW_MID));
-        valM = gridValue;
-        tempCol.addView(gridCell("高温", Color.rgb(255, 130, 100), ROW_FULL));
-        valH = gridValue;
+        TextView tempTitle = label("温度", Color.rgb(150, 160, 175));
+        tempTitle.setTextSize(17.0f);
+        tempTitle.setPadding(20, 2, 0, 4);
+        tempCol.addView(tempTitle);
+        tempCol.addView(gridCell("低温", Color.rgb(255, 200, 100), Color.rgb(33, 41, 56), ROW_START));
+        tempCol.addView(gridCell("中温", Color.rgb(255, 170, 90), Color.rgb(33, 41, 56), ROW_MID));
+        tempCol.addView(gridCell("高温", Color.rgb(255, 130, 100), Color.rgb(33, 41, 56), ROW_FULL));
 
         LinearLayout fanCol = new LinearLayout(this);
         fanCol.setOrientation(LinearLayout.VERTICAL);
         fanCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1.0f));
-        fanCol.addView(gridCell("低速", Color.rgb(255, 214, 140), ROW_PS));
-        valPS = gridValue;
-        fanCol.addView(gridCell("中速", Color.rgb(255, 186, 120), ROW_PM));
-        valPM = gridValue;
-        fanCol.addView(gridCell("高速", Color.rgb(255, 150, 120), ROW_PH));
-        valPH = gridValue;
+        TextView fanTitle = label("转速", Color.rgb(150, 160, 175));
+        fanTitle.setTextSize(17.0f);
+        fanTitle.setPadding(20, 2, 0, 4);
+        fanCol.addView(fanTitle);
+        fanCol.addView(gridCell("低速", Color.rgb(255, 214, 140), Color.rgb(40, 52, 70), ROW_PS));
+        fanCol.addView(gridCell("中速", Color.rgb(255, 186, 120), Color.rgb(40, 52, 70), ROW_PM));
+        fanCol.addView(gridCell("高速", Color.rgb(255, 150, 120), Color.rgb(40, 52, 70), ROW_PH));
 
         grid.addView(tempCol);
         grid.addView(fanCol);
         right.addView(grid);
-        updLbls();
 
         Button saveBtn = new Button(this);
         saveBtn.setText("保存温度与转速");
