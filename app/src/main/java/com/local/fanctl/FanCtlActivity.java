@@ -218,7 +218,7 @@ public class FanCtlActivity extends Activity {
         final int fm = cfgM;
         final int fh = cfgH;
         prefs.edit().putInt("cfgS", fs).putInt("cfgM", fm).putInt("cfgH", fh).commit();
-        tip.setText("已保存：" + fs + "°C 慢转 / " + fm + "°C 中速 / " + fh + "°C 全速，5秒内生效");
+        tip.setText("已保存：" + fs + "°C 起20% / " + fm + "°C 60% / " + fh + "°C 100%，5秒内生效");
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -254,7 +254,7 @@ public class FanCtlActivity extends Activity {
                 "[ -d $C/pwm1 ] || echo 1 > $C/export",
                 "P=$C/pwm1",
                 "echo " + PWM_PERIOD + " > $P/period",
-                "echo 20000 > $P/duty_cycle",
+                "echo 32000 > $P/duty_cycle",
                 "echo 1 > $P/enable",
                 "(",
                 "while :; do",
@@ -264,12 +264,19 @@ public class FanCtlActivity extends Activity {
                 "S=30; Md=45; H=60",   // 与 App 默认值保持一致，避免界面显示与实际控制不符
                 "[ -f $CF ] && read S Md H < $CF",
                 "[ -z $H ] && H=60",
+                // 阈值必须严格递增，否则下面的除法会出错
+                "[ $Md -le $S ] && Md=$((S+1))",
+                "[ $H -le $Md ] && H=$((Md+1))",
                 "T=$(cat /sys/class/thermal/thermal_zone0/temp)",
                 "T=$((T/1000))",
-                "D=" + PWM_PERIOD,
-                "[ $T -ge $S ] && D=20000",
-                "[ $T -ge $Md ] && D=12000",
-                "[ $T -ge $H ] && D=0",
+                // 风量百分比：S 起 20%，M 到 60%，H 到 100%，之间线性过渡
+                "P=0",
+                "if [ $T -ge $H ]; then P=100;",
+                "elif [ $T -ge $Md ]; then P=$((60 + 40 * (T - Md) / (H - Md)));",
+                "elif [ $T -ge $S ]; then P=$((20 + 40 * (T - S) / (Md - S)));",
+                "fi",
+                // duty 低有效：风量 P% => duty (100-P)*period/100
+                "D=$(((100 - P) * " + PWM_PERIOD + " / 100))",
                 "echo $D > $P/duty_cycle",
                 "sleep 5",
                 "done",
@@ -341,9 +348,9 @@ public class FanCtlActivity extends Activity {
 
     private void updLbls() {
         manLbl.setText("手动风量\u3000" + manPct + "%\u3000（0=停 100=全速）");
-        startLbl.setText("起步温度\u3000" + cfgS + "°C\u3000（低于→不转）");
-        midLbl.setText("中速温度\u3000" + cfgM + "°C\u3000（高于→中速）");
-        fullLbl.setText("全速温度\u3000" + cfgH + "°C\u3000（高于→全速）");
+        startLbl.setText("起步温度\u3000" + cfgS + "°C\u3000（起转 20%）");
+        midLbl.setText("中速温度\u3000" + cfgM + "°C\u3000（到此 60%）");
+        fullLbl.setText("全速温度\u3000" + cfgH + "°C\u3000（到此 100%）");
     }
 
     private void loadCfg() {
@@ -398,7 +405,7 @@ public class FanCtlActivity extends Activity {
             }
             String mode = "s".equals(parts[2])
                     ? "手动（" + manPct + "%）"
-                    : "自动（" + cfgS + "°C起转慢速 / " + cfgM + "°C中速 / " + cfgH + "°C全速）";
+                    : "自动（" + cfgS + "°C起20% → " + cfgM + "°C 60% → " + cfgH + "°C 100%）";
             status.setText("温度 " + temp + "°C    风量约 " + pct + "%");
             sub.setText("模式：" + mode);
         } catch (Exception e) {
