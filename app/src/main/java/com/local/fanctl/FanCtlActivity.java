@@ -264,6 +264,7 @@ public class FanCtlActivity extends Activity {
     private String[] fanScript() {
         return new String[]{
                 "#!/system/bin/sh",
+                "# fanctl-script-v3",   // 版本标记：App 启动时据此判断盒子上的脚本是否过期，过期会自动重写
                 "mount -t debugfs none /sys/kernel/debug 2>/dev/null",
                 "G=" + P_PADDR,
                 "echo \"ff6346c0 0x11111111\" > $G",
@@ -374,6 +375,44 @@ public class FanCtlActivity extends Activity {
                 });
             }
         }).start();
+    }
+
+    /**
+     * 检查盒子上的 90fan 脚本是否过期（老脚本只认三项配置，跑的还是 50/70/100 的老分档）。
+     * 已安装但过期 -> 自动重写并热重启，不必让用户再点「安装开机自启」。
+     */
+    private void upgradeScriptIfStale() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String chk = sh("[ -f " + P_SCRIPT + " ] && grep -c 'fanctl-script-v3' " + P_SCRIPT
+                        + " || echo NONE").trim();
+                if ("NONE".equals(chk) || !"0".equals(chk)) {
+                    return;   // 没有装过脚本，或已经是最新
+                }
+                final boolean ok = doInstall();
+                if (ok) {
+                    restartScript();
+                }
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        tip.setText(ok
+                                ? "温控脚本已自动升级到新版，当前曲线立即生效"
+                                : "温控脚本升级失败：请允许 root 授权后点「安装开机自启」");
+                    }
+                });
+                refresh();
+            }
+        }).start();
+    }
+
+    /** 干掉旧的温控循环，再用新脚本起一个新循环（不用重启盒子） */
+    private void restartScript() {
+        sh("pkill -f 'init\\.d/[9]0fan' 2>/dev/null;"
+                + "for p in $(ps -A 2>/dev/null | grep '[9]0fan' | grep -v grep | awk '{print $2}'); do kill -9 $p 2>/dev/null; done;"
+                + "sleep 1;"
+                + "nohup sh " + P_SCRIPT + " >/dev/null 2>&1 &");
     }
 
     private void rebootBox() {
@@ -955,6 +994,7 @@ public class FanCtlActivity extends Activity {
 
         autoBtn.requestFocus();
         loadCfg();
+        upgradeScriptIfStale();
     }
 
     @Override
